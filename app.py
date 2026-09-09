@@ -81,98 +81,102 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# --------------------------- REQUESTS-HTML BROWSER SORGULAMA ---------------------------
-async def sorgula_with_browser(query: str, endpoint_url: str, input_selectors: dict, button_selector: str) -> dict:
-    """requests-html ile JavaScript rendering yaparak sorgulama yapar."""
+# --------------------------- HTTP İSTEK SORGULAMA ---------------------------
+async def sorgula_with_session(query: str, api_url: str, page_url: str, param_name: str = "tckn") -> dict:
+    """Session ile Rivex API'sine direkt istek atar."""
     try:
-        asession = AsyncHTMLSession()
+        session = requests.Session()
         
-        # Sayfayı aç ve JavaScript'i render et
-        r = await asession.get(endpoint_url)
-        await r.html.arender(timeout=30, sleep=2)
+        # Önce sayfayı ziyaret et (cookie almak için)
+        headers_page = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        }
+        session.get(page_url, headers=headers_page, timeout=TIMEOUT)
         
-        # Input alanlarını doldur ve butona tıkla için JavaScript çalıştır
-        if "main" in input_selectors:
-            # Tek input
-            script = f"""
-            document.querySelector('{input_selectors["main"]}').value = '{query}';
-            document.querySelector('{button_selector}').click();
-            """
-        elif "ad" in input_selectors and "soyad" in input_selectors:
-            # Ad ve Soyad ayrı
-            parts = query.strip().split(maxsplit=1)
-            ad = parts[0] if len(parts) > 0 else ""
-            soyad = parts[1] if len(parts) > 1 else ""
-            script = f"""
-            document.querySelector('{input_selectors["ad"]}').value = '{ad}';
-            document.querySelector('{input_selectors["soyad"]}').value = '{soyad}';
-            document.querySelector('{button_selector}').click();
-            """
-        
-        await r.html.arender(script=script, timeout=30, sleep=3)
-        
-        html = r.html.html
-        await asession.close()
-        
-        return {
-            "success": True,
-            "text": html,
-            "method": "requests_html"
+        # Şimdi API'ye istek at
+        headers_api = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+            "Accept": "*/*",
+            "Referer": page_url,
+            "X-Requested-With": "XMLHttpRequest",
         }
         
+        # GET isteği
+        params = {param_name: query}
+        response = session.get(api_url, params=params, headers=headers_api, timeout=TIMEOUT)
+        
+        # JSON yanıtı kontrol et
+        try:
+            json_data = response.json()
+            return {
+                "success": True,
+                "json": json_data,
+                "text": response.text,
+                "method": "http_json"
+            }
+        except:
+            # JSON değilse HTML parse et
+            return {
+                "success": True,
+                "text": response.text,
+                "method": "http_html"
+            }
+            
     except Exception as e:
         return {
             "success": False,
-            "error": f"Browser hatası: {str(e)}"
+            "error": f"HTTP hatası: {str(e)}"
         }
 
 # --------------------------- SENKRON SORGULAMA ---------------------------
-def sorgula_senkron(query: str, endpoint_url: str, input_selectors: dict, button_selector: str) -> dict:
-    """Senkron olarak requests-html ile sorgulama yapar."""
+def sorgula_senkron(query: str, api_url: str, page_url: str, param_name: str = "tckn") -> dict:
+    """Senkron HTTP isteği."""
     try:
-        session = HTMLSession()
+        session = requests.Session()
         
-        # Sayfayı aç ve JavaScript'i render et
-        r = session.get(endpoint_url)
-        r.html.render(timeout=30, sleep=2)
+        headers_page = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        }
+        session.get(page_url, headers=headers_page, timeout=TIMEOUT)
         
-        # Input alanlarını doldur ve butona tıkla
-        if "main" in input_selectors:
-            script = f"""
-            document.querySelector('{input_selectors["main"]}').value = '{query}';
-            document.querySelector('{button_selector}').click();
-            """
-        elif "ad" in input_selectors and "soyad" in input_selectors:
-            parts = query.strip().split(maxsplit=1)
-            ad = parts[0] if len(parts) > 0 else ""
-            soyad = parts[1] if len(parts) > 1 else ""
-            script = f"""
-            document.querySelector('{input_selectors["ad"]}').value = '{ad}';
-            document.querySelector('{input_selectors["soyad"]}').value = '{soyad}';
-            document.querySelector('{button_selector}').click();
-            """
-        
-        r.html.render(script=script, timeout=30, sleep=3)
-        
-        html = r.html.html
-        session.close()
-        
-        return {
-            "success": True,
-            "text": html,
-            "method": "requests_html"
+        headers_api = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+            "Accept": "*/*",
+            "Referer": page_url,
+            "X-Requested-With": "XMLHttpRequest",
         }
         
+        params = {param_name: query}
+        response = session.get(api_url, params=params, headers=headers_api, timeout=TIMEOUT)
+        
+        try:
+            json_data = response.json()
+            return {
+                "success": True,
+                "json": json_data,
+                "text": response.text,
+                "method": "http_json"
+            }
+        except:
+            return {
+                "success": True,
+                "text": response.text,
+                "method": "http_html"
+            }
+            
     except Exception as e:
         return {
             "success": False,
-            "error": f"Browser hatası: {str(e)}"
+            "error": f"HTTP hatası: {str(e)}"
         }
 
 # --------------------------- ASENKRON SORGULAMA ---------------------------
-async def sorgula_async(query: str, endpoint_url: str, input_selectors: dict, button_selector: str) -> dict:
-    """Asenkron olarak Playwright ile sorgulama yapar."""
-    return await sorgula_with_browser(query, endpoint_url, input_selectors, button_selector)
+async def sorgula_async(query: str, api_url: str, page_url: str, param_name: str = "tckn") -> dict:
+    """Asenkron HTTP isteği."""
+    loop = asyncio.get_event_loop()
+    return await loop.run_in_executor(None, sorgula_senkron, query, api_url, page_url, param_name)
 
 
 # --------------------------- TABLO PARSE EDİCİ ---------------------------
@@ -345,16 +349,26 @@ async def root():
 # Genel sorgulama fonksiyonu
 async def genel_sorgula(endpoint_name: str, query: str):
     """Herhangi bir endpoint için sorgulama yapar."""
-    if endpoint_name not in ENDPOINTS:
+    if endpoint_name not in API_ENDPOINTS:
         raise HTTPException(status_code=404, detail=f"Endpoint '{endpoint_name}' bulunamadı")
     
-    endpoint_url = ENDPOINTS[endpoint_name]
-    input_selectors = INPUT_SELECTORS[endpoint_name]
-    button_selector = BUTTON_SELECTORS[endpoint_name]
+    api_url = API_ENDPOINTS[endpoint_name]
+    page_url = PAGE_ENDPOINTS[endpoint_name]
     
-    console.print(f"[bold cyan]📥 {endpoint_name} sorgu (requests-html): {query}[/bold cyan]")
+    # Parametre adını belirle
+    param_map = {
+        "tcsorgu": "tckn",
+        "adsoyad": "adsoyad",
+        "gsmtc": "gsm",
+        "tcgsm": "tckn",
+        "aile": "tckn",
+        "sulale": "tckn"
+    }
+    param_name = param_map.get(endpoint_name, "tckn")
     
-    raw = await sorgula_async(query, endpoint_url, input_selectors, button_selector)
+    console.print(f"[bold cyan]📥 {endpoint_name} sorgu (HTTP): {query}[/bold cyan]")
+    
+    raw = await sorgula_async(query, api_url, page_url, param_name)
     
     if not raw.get("success"):
         raise HTTPException(
@@ -362,7 +376,17 @@ async def genel_sorgula(endpoint_name: str, query: str):
             detail=raw.get("error", "Sorgulama başarısız")
         )
     
-    # Tabloları ve değerleri çıkar
+    # JSON yanıt varsa direkt döndür
+    if "json" in raw:
+        return SorguResponse(
+            success=True,
+            query=query,
+            endpoint=endpoint_name,
+            table_data={"json_response": raw["json"]},
+            debug_html=None
+        )
+    
+    # HTML ise tabloları çıkar
     result = extract_table_data(raw.get("text", ""))
     
     return SorguResponse(
@@ -435,7 +459,7 @@ async def health():
         "timestamp": datetime.now().isoformat(),
         "moon_evreni": "aktif",
         "kod_uretici": "destroyerr1558",
-        "endpoints": list(ENDPOINTS.keys())
+        "endpoints": list(API_ENDPOINTS.keys())
     }
 
 # --------------------------- BAŞLATMA ---------------------------
@@ -445,7 +469,7 @@ if __name__ == "__main__":
         f"[cyan]Rivex Multi Sorgulama API - Moon Evreni 2035[/cyan]\n"
         f"[yellow]📍 http://localhost:8000[/yellow]\n"
         f"[green]📘 Dökümantasyon: /docs[/green]\n"
-        f"[blue]🔧 6 Endpoint Aktif: {', '.join(ENDPOINTS.keys())}[/blue]",
+        f"[blue]🔧 6 Endpoint Aktif: {', '.join(API_ENDPOINTS.keys())}[/blue]",
         border_style="bright_blue"
     ))
 
