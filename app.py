@@ -141,15 +141,20 @@ def sorgula_senkron(query: str, api_url: str, page_url: str, param_name: str = "
         headers_api = {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
             "Accept": "*/*",
+            "Content-Type": "application/x-www-form-urlencoded",
             "Referer": page_url,
             "X-Requested-With": "XMLHttpRequest",
         }
         
-        params = {param_name: query}
-        response = session.get(api_url, params=params, headers=headers_api, timeout=TIMEOUT)
+        # POST ile gönder
+        data = {param_name: query}
+        response = session.post(api_url, data=data, headers=headers_api, timeout=TIMEOUT)
+        
+        console.print(f"[bold red]📊 Status: {response.status_code}, Response length: {len(response.text)}[/bold red]")
         
         try:
             json_data = response.json()
+            console.print(f"[bold red]📦 JSON: {json.dumps(json_data, ensure_ascii=False)[:500]}[/bold red]")
             return {
                 "success": True,
                 "json": json_data,
@@ -157,6 +162,7 @@ def sorgula_senkron(query: str, api_url: str, page_url: str, param_name: str = "
                 "method": "http_json"
             }
         except:
+            console.print(f"[bold red]📄 HTML: {response.text[:300]}[/bold red]")
             return {
                 "success": True,
                 "text": response.text,
