@@ -196,6 +196,13 @@ def sorgula_adsoyad_senkron(ad: str, soyad: str, api_url: str, page_url: str) ->
         
         # Ad ve soyad ayrı parametreler
         params = {"ad": ad, "soyad": soyad}
+        
+        # Debug için URL'i console'a yazdır
+        import urllib.parse
+        query_string = urllib.parse.urlencode(params)
+        full_url = f"{api_url}?{query_string}"
+        console.print(f"[bold magenta]🌐 API URL: {full_url}[/bold magenta]")
+        
         response = session.get(api_url, params=params, headers=headers_api, timeout=TIMEOUT)
         
         try:
@@ -419,6 +426,15 @@ async def genel_sorgula(endpoint_name: str, query: str):
         parts = query.strip().split(maxsplit=1)
         ad = parts[0] if len(parts) > 0 else ""
         soyad = parts[1] if len(parts) > 1 else ""
+        
+        console.print(f"[bold yellow]🔍 Ad: '{ad}', Soyad: '{soyad}'[/bold yellow]")
+        
+        # En az biri boş olmamalı
+        if not ad and not soyad:
+            return SorguResponse(
+                success=False,
+                error="En az ad veya soyad girilmelidir"
+            )
         
         # Özel sorgulama fonksiyonu çağır
         raw = await sorgula_adsoyad_async(ad, soyad, api_url, page_url)
