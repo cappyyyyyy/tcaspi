@@ -3,5 +3,6 @@ uvicorn[standard]
 pydantic>=2.0.0,<3.0.0
 requests
 requests-html
+lxml-html-clean
 colorama
 rich
