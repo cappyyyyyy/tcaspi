@@ -55,10 +55,7 @@ class SorguRequest(BaseModel):
 
 class SorguResponse(BaseModel):
     success: bool
-    query: str
-    endpoint: str
-    table_data: Optional[dict] = None  # tables, parsed_data, raw_data içerir
-    debug_html: Optional[str] = None  # İlk 2000 karakter (debugging için)
+    data: Optional[Any] = None  # Direkt veri
     error: Optional[str] = None
     timestamp: str = Field(default_factory=lambda: datetime.now().isoformat())
     source: str = "Rivex.lol"
@@ -440,7 +437,7 @@ async def genel_sorgula(endpoint_name: str, query: str):
         
         # Sadece istenen alanları filtrele
         allowed_fields = [
-            "ID", "TC", "AD", "SOYAD", "GSM", "BABAADI", "BABATC", 
+            "TC", "AD", "SOYAD", "GSM", "BABAADI", "BABATC", 
             "ANNEADI", "ANNETC", "DOGUMTARIHI", "OLUMTARIHI", "DOGUMYERI",
             "MEMLEKETIL", "MEMLEKETILCE", "MEMLEKETKOY", "ADRESIL", "ADRESILCE",
             "AILESIRANO", "BIREYSIRANO", "MEDENIHAL", "CINSIYET", "YAS", "ADRES"
@@ -455,29 +452,26 @@ async def genel_sorgula(endpoint_name: str, query: str):
                     filtered_data.append(filtered_item)
                 return SorguResponse(
                     success=True,
-                    query=query,
-                    endpoint=endpoint_name,
-                    table_data={"data": filtered_data},
-                    debug_html=None
+                    data=filtered_data
                 )
             else:
                 # Tek bir obje
                 filtered = {k: v for k, v in json_data["data"].items() if k in allowed_fields}
                 return SorguResponse(
                     success=True,
-                    query=query,
-                    endpoint=endpoint_name,
-                    table_data=filtered,
-                    debug_html=None
+                    data=filtered
                 )
         else:
-            # Direkt obje veya farklı format
+            # Direkt obje veya farklı format - hatayı da göster
+            if isinstance(json_data, dict) and json_data.get("success") == False:
+                return SorguResponse(
+                    success=False,
+                    error=json_data.get("message", "Bilinmeyen hata")
+                )
+            
             return SorguResponse(
                 success=True,
-                query=query,
-                endpoint=endpoint_name,
-                table_data=json_data,
-                debug_html=None
+                data=json_data
             )
     
     # HTML ise tabloları çıkar
@@ -485,10 +479,7 @@ async def genel_sorgula(endpoint_name: str, query: str):
     
     return SorguResponse(
         success=True,
-        query=query,
-        endpoint=endpoint_name,
-        table_data=result if (result.get("tables") or result.get("parsed_data")) else None,
-        debug_html=raw.get("text", "")[:2000]  # İlk 2000 karakter
+        data=result if (result.get("tables") or result.get("parsed_data")) else None
     )
 
 # TC Sorgu
