@@ -178,6 +178,55 @@ async def sorgula_async(query: str, api_url: str, page_url: str, param_name: str
     loop = asyncio.get_event_loop()
     return await loop.run_in_executor(None, sorgula_senkron, query, api_url, page_url, param_name)
 
+# --------------------------- AD SOYAD İÇİN ÖZEL FONKSIYON ---------------------------
+def sorgula_adsoyad_senkron(ad: str, soyad: str, api_url: str, page_url: str) -> dict:
+    """Ad soyad için özel senkron HTTP isteği."""
+    try:
+        session = requests.Session()
+        
+        headers_page = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        }
+        session.get(page_url, headers=headers_page, timeout=TIMEOUT)
+        
+        headers_api = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+            "Accept": "*/*",
+            "Referer": page_url,
+            "X-Requested-With": "XMLHttpRequest",
+        }
+        
+        # Ad ve soyad ayrı parametreler
+        params = {"ad": ad, "soyad": soyad}
+        response = session.get(api_url, params=params, headers=headers_api, timeout=TIMEOUT)
+        
+        try:
+            json_data = response.json()
+            return {
+                "success": True,
+                "json": json_data,
+                "text": response.text,
+                "method": "http_json"
+            }
+        except:
+            return {
+                "success": True,
+                "text": response.text,
+                "method": "http_html"
+            }
+            
+    except Exception as e:
+        return {
+            "success": False,
+            "error": f"HTTP hatası: {str(e)}"
+        }
+
+async def sorgula_adsoyad_async(ad: str, soyad: str, api_url: str, page_url: str) -> dict:
+    """Ad soyad için özel asenkron HTTP isteği."""
+    loop = asyncio.get_event_loop()
+    return await loop.run_in_executor(None, sorgula_adsoyad_senkron, ad, soyad, api_url, page_url)
+
 
 # --------------------------- TABLO PARSE EDİCİ ---------------------------
 def extract_javascript_data(html: str) -> dict:
@@ -358,7 +407,7 @@ async def genel_sorgula(endpoint_name: str, query: str):
     # Parametre adını belirle
     param_map = {
         "tcsorgu": "tckn",
-        "adsoyad": "adsoyad",
+        "adsoyad": "adsoyad",  # Özel işlem gerekecek
         "gsmtc": "gsm",
         "tcgsm": "tckn",
         "aile": "tckn",
@@ -368,7 +417,16 @@ async def genel_sorgula(endpoint_name: str, query: str):
     
     console.print(f"[bold cyan]📥 {endpoint_name} sorgu (HTTP): {query}[/bold cyan]")
     
-    raw = await sorgula_async(query, api_url, page_url, param_name)
+    # Ad soyad için özel işlem
+    if endpoint_name == "adsoyad":
+        parts = query.strip().split(maxsplit=1)
+        ad = parts[0] if len(parts) > 0 else ""
+        soyad = parts[1] if len(parts) > 1 else ""
+        
+        # Özel sorgulama fonksiyonu çağır
+        raw = await sorgula_adsoyad_async(ad, soyad, api_url, page_url)
+    else:
+        raw = await sorgula_async(query, api_url, page_url, param_name)
     
     if not raw.get("success"):
         raise HTTPException(
@@ -376,15 +434,51 @@ async def genel_sorgula(endpoint_name: str, query: str):
             detail=raw.get("error", "Sorgulama başarısız")
         )
     
-    # JSON yanıt varsa direkt döndür
+    # JSON yanıt varsa temizle ve döndür
     if "json" in raw:
-        return SorguResponse(
-            success=True,
-            query=query,
-            endpoint=endpoint_name,
-            table_data={"json_response": raw["json"]},
-            debug_html=None
-        )
+        json_data = raw["json"]
+        
+        # Sadece istenen alanları filtrele
+        allowed_fields = [
+            "ID", "TC", "AD", "SOYAD", "GSM", "BABAADI", "BABATC", 
+            "ANNEADI", "ANNETC", "DOGUMTARIHI", "OLUMTARIHI", "DOGUMYERI",
+            "MEMLEKETIL", "MEMLEKETILCE", "MEMLEKETKOY", "ADRESIL", "ADRESILCE",
+            "AILESIRANO", "BIREYSIRANO", "MEDENIHAL", "CINSIYET", "YAS", "ADRES"
+        ]
+        
+        # Eğer data array ise her bir öğeyi filtrele
+        if isinstance(json_data, dict) and "data" in json_data:
+            if isinstance(json_data["data"], list):
+                filtered_data = []
+                for item in json_data["data"]:
+                    filtered_item = {k: v for k, v in item.items() if k in allowed_fields}
+                    filtered_data.append(filtered_item)
+                return SorguResponse(
+                    success=True,
+                    query=query,
+                    endpoint=endpoint_name,
+                    table_data={"data": filtered_data},
+                    debug_html=None
+                )
+            else:
+                # Tek bir obje
+                filtered = {k: v for k, v in json_data["data"].items() if k in allowed_fields}
+                return SorguResponse(
+                    success=True,
+                    query=query,
+                    endpoint=endpoint_name,
+                    table_data=filtered,
+                    debug_html=None
+                )
+        else:
+            # Direkt obje veya farklı format
+            return SorguResponse(
+                success=True,
+                query=query,
+                endpoint=endpoint_name,
+                table_data=json_data,
+                debug_html=None
+            )
     
     # HTML ise tabloları çıkar
     result = extract_table_data(raw.get("text", ""))
