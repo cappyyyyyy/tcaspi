@@ -464,10 +464,13 @@ async def health():
 
 # --------------------------- BAŞLATMA ---------------------------
 if __name__ == "__main__":
+    import os
+    port = int(os.environ.get("PORT", 8000))
+    
     console.print(Panel.fit(
         f"[bold magenta]🚀 destroyerr1558 Advanced Code Creator[/bold magenta]\n"
         f"[cyan]Rivex Multi Sorgulama API - Moon Evreni 2035[/cyan]\n"
-        f"[yellow]📍 http://localhost:8000[/yellow]\n"
+        f"[yellow]📍 http://0.0.0.0:{port}[/yellow]\n"
         f"[green]📘 Dökümantasyon: /docs[/green]\n"
         f"[blue]🔧 6 Endpoint Aktif: {', '.join(API_ENDPOINTS.keys())}[/blue]",
         border_style="bright_blue"
@@ -476,7 +479,7 @@ if __name__ == "__main__":
     uvicorn.run(
         "app:app",
         host="0.0.0.0",
-        port=8000,
+        port=port,
         reload=False,
         log_level="info",
         access_log=True
