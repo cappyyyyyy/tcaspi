@@ -1,7 +1,6 @@
 import re
 import json
 import asyncio
-import aiohttp
 import requests
 from typing import Optional, Any
 from datetime import datetime
@@ -15,8 +14,7 @@ from fastapi.responses import JSONResponse, HTMLResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field, field_validator
 import uvicorn
-from playwright.async_api import async_playwright
-from playwright.sync_api import sync_playwright
+from requests_html import HTMLSession, AsyncHTMLSession
 
 # Colorama ve Rich başlat
 init(autoreset=True)
@@ -88,107 +86,92 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# --------------------------- PLAYWRIGHT BROWSER SORGULAMA ---------------------------
+# --------------------------- REQUESTS-HTML BROWSER SORGULAMA ---------------------------
 async def sorgula_with_browser(query: str, endpoint_url: str, input_selectors: dict, button_selector: str) -> dict:
-    """Playwright ile gerçek tarayıcı kullanarak sorgulama yapar."""
+    """requests-html ile JavaScript rendering yaparak sorgulama yapar."""
     try:
-        async with async_playwright() as p:
-            # Tarayıcıyı başlat (headless mode)
-            browser = await p.chromium.launch(headless=True)
-            context = await browser.new_context(
-                user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-            )
-            page = await context.new_page()
-            
-            # Sayfayı aç
-            await page.goto(endpoint_url, wait_until="domcontentloaded", timeout=TIMEOUT)
-            
-            # Input alanlarını doldur
-            if "main" in input_selectors:
-                # Tek input (TC, GSM vb.)
-                await page.fill(input_selectors["main"], query)
-            elif "ad" in input_selectors and "soyad" in input_selectors:
-                # Ad ve Soyad ayrı inputlar
-                parts = query.strip().split(maxsplit=1)
-                ad = parts[0] if len(parts) > 0 else ""
-                soyad = parts[1] if len(parts) > 1 else ""
-                
-                await page.fill(input_selectors["ad"], ad)
-                await page.fill(input_selectors["soyad"], soyad)
-            
-            # Sorgula butonuna tıkla
-            await page.click(button_selector)
-            
-            # Sonuç tablosunun yüklenmesini bekle
-            await page.wait_for_selector("#sonucAlani table, .result-table", timeout=TIMEOUT)
-            
-            # Sayfanın tam HTML'ini al
-            html = await page.content()
-            
-            # Tarayıcıyı kapat
-            await browser.close()
-            
-            return {
-                "success": True,
-                "text": html,
-                "method": "playwright_browser"
-            }
-            
+        asession = AsyncHTMLSession()
+        
+        # Sayfayı aç ve JavaScript'i render et
+        r = await asession.get(endpoint_url)
+        await r.html.arender(timeout=30, sleep=2)
+        
+        # Input alanlarını doldur ve butona tıkla için JavaScript çalıştır
+        if "main" in input_selectors:
+            # Tek input
+            script = f"""
+            document.querySelector('{input_selectors["main"]}').value = '{query}';
+            document.querySelector('{button_selector}').click();
+            """
+        elif "ad" in input_selectors and "soyad" in input_selectors:
+            # Ad ve Soyad ayrı
+            parts = query.strip().split(maxsplit=1)
+            ad = parts[0] if len(parts) > 0 else ""
+            soyad = parts[1] if len(parts) > 1 else ""
+            script = f"""
+            document.querySelector('{input_selectors["ad"]}').value = '{ad}';
+            document.querySelector('{input_selectors["soyad"]}').value = '{soyad}';
+            document.querySelector('{button_selector}').click();
+            """
+        
+        await r.html.arender(script=script, timeout=30, sleep=3)
+        
+        html = r.html.html
+        await asession.close()
+        
+        return {
+            "success": True,
+            "text": html,
+            "method": "requests_html"
+        }
+        
     except Exception as e:
         return {
             "success": False,
-            "error": f"Tarayıcı hatası: {str(e)}"
+            "error": f"Browser hatası: {str(e)}"
         }
 
 # --------------------------- SENKRON SORGULAMA ---------------------------
 def sorgula_senkron(query: str, endpoint_url: str, input_selectors: dict, button_selector: str) -> dict:
-    """Senkron olarak Playwright ile sorgulama yapar."""
+    """Senkron olarak requests-html ile sorgulama yapar."""
     try:
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            context = browser.new_context(
-                user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-            )
-            page = context.new_page()
-            
-            # Sayfayı aç
-            page.goto(endpoint_url, wait_until="domcontentloaded", timeout=TIMEOUT)
-            
-            # Input alanlarını doldur
-            if "main" in input_selectors:
-                # Tek input (TC, GSM vb.)
-                page.fill(input_selectors["main"], query)
-            elif "ad" in input_selectors and "soyad" in input_selectors:
-                # Ad ve Soyad ayrı inputlar
-                parts = query.strip().split(maxsplit=1)
-                ad = parts[0] if len(parts) > 0 else ""
-                soyad = parts[1] if len(parts) > 1 else ""
-                
-                page.fill(input_selectors["ad"], ad)
-                page.fill(input_selectors["soyad"], soyad)
-            
-            # Sorgula butonuna tıkla
-            page.click(button_selector)
-            
-            # Sonuç tablosunun yüklenmesini bekle
-            page.wait_for_selector("#sonucAlani table, .result-table", timeout=TIMEOUT)
-            
-            # Sayfanın tam HTML'ini al
-            html = page.content()
-            
-            # Tarayıcıyı kapat
-            browser.close()
-            
-            return {
-                "success": True,
-                "text": html,
-                "method": "playwright_browser"
-            }
-            
+        session = HTMLSession()
+        
+        # Sayfayı aç ve JavaScript'i render et
+        r = session.get(endpoint_url)
+        r.html.render(timeout=30, sleep=2)
+        
+        # Input alanlarını doldur ve butona tıkla
+        if "main" in input_selectors:
+            script = f"""
+            document.querySelector('{input_selectors["main"]}').value = '{query}';
+            document.querySelector('{button_selector}').click();
+            """
+        elif "ad" in input_selectors and "soyad" in input_selectors:
+            parts = query.strip().split(maxsplit=1)
+            ad = parts[0] if len(parts) > 0 else ""
+            soyad = parts[1] if len(parts) > 1 else ""
+            script = f"""
+            document.querySelector('{input_selectors["ad"]}').value = '{ad}';
+            document.querySelector('{input_selectors["soyad"]}').value = '{soyad}';
+            document.querySelector('{button_selector}').click();
+            """
+        
+        r.html.render(script=script, timeout=30, sleep=3)
+        
+        html = r.html.html
+        session.close()
+        
+        return {
+            "success": True,
+            "text": html,
+            "method": "requests_html"
+        }
+        
     except Exception as e:
         return {
             "success": False,
-            "error": f"Tarayıcı hatası: {str(e)}"
+            "error": f"Browser hatası: {str(e)}"
         }
 
 # --------------------------- ASENKRON SORGULAMA ---------------------------
@@ -374,7 +357,7 @@ async def genel_sorgula(endpoint_name: str, query: str):
     input_selectors = INPUT_SELECTORS[endpoint_name]
     button_selector = BUTTON_SELECTORS[endpoint_name]
     
-    console.print(f"[bold cyan]📥 {endpoint_name} sorgu (Playwright): {query}[/bold cyan]")
+    console.print(f"[bold cyan]📥 {endpoint_name} sorgu (requests-html): {query}[/bold cyan]")
     
     raw = await sorgula_async(query, endpoint_url, input_selectors, button_selector)
     
