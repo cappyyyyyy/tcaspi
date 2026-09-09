@@ -2,7 +2,7 @@ fastapi
 uvicorn[standard]
 pydantic>=2.0.0,<3.0.0
 requests
-requests-html
-lxml-html-clean
+beautifulsoup4
+lxml
 colorama
 rich
