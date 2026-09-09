@@ -190,20 +190,18 @@ def sorgula_adsoyad_senkron(ad: str, soyad: str, api_url: str, page_url: str) ->
         headers_api = {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
             "Accept": "*/*",
+            "Content-Type": "application/x-www-form-urlencoded",
             "Referer": page_url,
             "X-Requested-With": "XMLHttpRequest",
         }
         
-        # Ad ve soyad ayrı parametreler
-        params = {"ad": ad, "soyad": soyad}
+        # Ad ve soyad ayrı parametreler - POST ile dene
+        data = {"ad": ad, "soyad": soyad}
         
-        # Debug için URL'i console'a yazdır
-        import urllib.parse
-        query_string = urllib.parse.urlencode(params)
-        full_url = f"{api_url}?{query_string}"
-        console.print(f"[bold magenta]🌐 API URL: {full_url}[/bold magenta]")
+        # Debug için
+        console.print(f"[bold magenta]🌐 POST to {api_url} with data: {data}[/bold magenta]")
         
-        response = session.get(api_url, params=params, headers=headers_api, timeout=TIMEOUT)
+        response = session.post(api_url, data=data, headers=headers_api, timeout=TIMEOUT)
         
         try:
             json_data = response.json()
