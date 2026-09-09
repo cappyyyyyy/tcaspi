@@ -6,15 +6,14 @@ from typing import Optional, Any
 from datetime import datetime
 from colorama import init, Fore, Style
 from rich.console import Console
-from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn
 from rich.table import Table
 from rich.panel import Panel
 from fastapi import FastAPI, Query, HTTPException, status
 from fastapi.responses import JSONResponse, HTMLResponse
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field
 import uvicorn
-from requests_html import HTMLSession, AsyncHTMLSession
+from bs4 import BeautifulSoup
 
 # Colorama ve Rich başlat
 init(autoreset=True)
@@ -22,9 +21,20 @@ console = Console()
 
 # --------------------------- KONFİG ---------------------------
 API_TITLE = "Rivex Sorgulama API - Moon Edition"
-API_VERSION = "2035.6.0"
+API_VERSION = "2035.7.0"
 
-ENDPOINTS = {
+# Rivex API endpoint'leri (gerçek API yolu)
+API_ENDPOINTS = {
+    "tcsorgu": "https://rivex.lol/api/req/tc.php",
+    "adsoyad": "https://rivex.lol/api/req/adsoyad.php",
+    "gsmtc": "https://rivex.lol/api/req/gsmtc.php",
+    "tcgsm": "https://rivex.lol/api/req/tcgsm.php",
+    "aile": "https://rivex.lol/api/req/aile.php",
+    "sulale": "https://rivex.lol/api/req/sulale.php"
+}
+
+# Referer için sayfa URL'leri
+PAGE_ENDPOINTS = {
     "tcsorgu": "https://rivex.lol/tcsorgu.php",
     "adsoyad": "https://rivex.lol/adsoyad.php",
     "gsmtc": "https://rivex.lol/gsmtc.php",
@@ -32,23 +42,8 @@ ENDPOINTS = {
     "aile": "https://rivex.lol/aile.php",
     "sulale": "https://rivex.lol/sülale.php"
 }
-INPUT_SELECTORS = {
-    "tcsorgu": {"main": "#tc"},
-    "adsoyad": {"ad": "#ad", "soyad": "#soyad"},  # İki ayrı input
-    "gsmtc": {"main": "#gsm"},
-    "tcgsm": {"main": "#tc"},
-    "aile": {"main": "#tc"},
-    "sulale": {"main": "#tc"}
-}
-BUTTON_SELECTORS = {
-    "tcsorgu": "#sorgula",
-    "adsoyad": "#sorgula",
-    "gsmtc": "#sorgula",
-    "tcgsm": "#sorgula",
-    "aile": "#sorgula",
-    "sulale": "#sorgula"
-}
-TIMEOUT = 30000  # milliseconds (30 saniye)
+
+TIMEOUT = 30  # saniye
 
 # --------------------------- MODELLER (Pydantic V2 Uyumlu) ---------------------------
 class SorguRequest(BaseModel):
